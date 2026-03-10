@@ -1,0 +1,11 @@
+{
+  "repos": [
+    {
+      "name": "superpowers",
+      "url": "https://github.com/obra/superpowers.git",
+      "path": "third_party/superpowers",
+      "depth": 1,
+      "sparse": ["skills"]
+    }
+  ]
+}
