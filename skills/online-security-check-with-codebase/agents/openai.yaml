@@ -1,0 +1,7 @@
+interface:
+  display_name: "Online Security Check"
+  short_description: "Assess API and app security with codebase context"
+  default_prompt: "Use $online-security-check-with-codebase to assess this app using its URL, auth headers, Swagger docs, and codebase."
+
+policy:
+  allow_implicit_invocation: true
