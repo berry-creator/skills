@@ -1,0 +1,7 @@
+interface:
+  display_name: "Code Understanding"
+  short_description: "Explain code, systems, repos, and URLs in a structured format"
+  default_prompt: "Use $code-understanding to understand this feature, class, function, entity, module, repository, or URL and produce a structured, high-quality explanation."
+
+policy:
+  allow_implicit_invocation: true

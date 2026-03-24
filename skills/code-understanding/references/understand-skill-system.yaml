@@ -1,0 +1,611 @@
+understand_skill_system:
+  version: "1.0"
+  purpose: "Generate structured, high-quality explanations for code, systems, features, entities, modules, repositories, and URLs."
+  shared_contract:
+    input_schema:
+      source_type:
+        type: "enum"
+        values:
+          - "feature"
+          - "class"
+          - "function"
+          - "entity"
+          - "module"
+          - "repository"
+          - "url"
+      source_input:
+        type: "string"
+        description: "Raw user input such as a description, identifier, code snippet, repo path, or URL."
+      source_content:
+        type: "string"
+        required: false
+        description: "Resolved code, docs, article text, API spec, or extracted repository context."
+      metadata:
+        type: "object"
+        required: false
+        fields:
+          audience: "Target reader such as beginner, engineer, reviewer, maintainer."
+          depth: "brief | standard | deep"
+          language: "Preferred output language."
+          focus: "Optional emphasis such as architecture, behavior, data flow, or extension."
+          runtime_context: "Optional framework, stack, or system context."
+          url_resolved_type: "code_repository | single_file | api_documentation | technical_article"
+          confidence_notes: "Optional uncertainty markers from extraction."
+    output_style_rules:
+      - "Explain for understanding, not paraphrase."
+      - "Do not restate code line-by-line."
+      - "Do not produce trivial summaries."
+      - "Highlight key logic, responsibilities, design choices, and interactions."
+      - "Prefer precise terminology over vague wording."
+      - "When something is inferred rather than explicit, label it as an inference."
+      - "If a section is weakly applicable, state that briefly instead of forcing content."
+    adaptive_focus_rules:
+      class:
+        - "Emphasize methods, fields, collaborators, and lifecycle."
+        - "Explain how behavior is distributed across methods."
+      function:
+        - "Emphasize inputs, outputs, side effects, branching, and edge cases."
+      entity:
+        - "Emphasize fields, invariants, identity, and relationships."
+      feature:
+        - "Emphasize workflow, participating components, user-visible behavior, and system boundaries."
+      module:
+        - "Emphasize internal organization, public surface, dependencies, and responsibilities."
+      repository:
+        - "Emphasize architecture, major subsystems, conventions, and integration flow."
+      url:
+        - "Detect content type first, extract relevant structure and purpose, then normalize into the same explanation format."
+    shared_variables:
+      - "{{source_type}}"
+      - "{{source_input}}"
+      - "{{source_content}}"
+      - "{{metadata}}"
+      - "{{normalized_context}}"
+
+  modular_skills:
+    - name: "overview"
+      description: "Produce a concise but meaningful explanation of what the input is, why it exists, and where it fits in the system."
+      input:
+        required:
+          - "source_type"
+          - "source_input"
+        optional:
+          - "source_content"
+          - "metadata"
+          - "normalized_context"
+      output:
+        section: "Overview"
+        schema:
+          summary: "1 short paragraph"
+          key_points: "2-5 bullets"
+      prompt_template: |
+        You are the "overview" skill in an Understand System.
+
+        Input type: {{source_type}}
+        Raw input: {{source_input}}
+        Source content: {{source_content}}
+        Metadata: {{metadata}}
+        Normalized context: {{normalized_context}}
+
+        Task:
+        1. Identify what this thing is at the right abstraction level.
+        2. Explain its purpose in the surrounding system.
+        3. State why it matters without repeating implementation details.
+
+        Adaptation rules:
+        - Feature: describe the user or system capability it enables.
+        - Class: describe the abstraction it models.
+        - Function: describe the operation it performs.
+        - Entity: describe the concept or record it represents.
+        - Module or repository: describe the subsystem or product area it covers.
+        - URL: use resolved content, not the URL string itself.
+
+        Output only the "Overview" section with a short paragraph and 2-5 key points.
+        Avoid line-by-line restatement and avoid generic wording.
+
+    - name: "responsibility"
+      description: "Define the responsibility boundary: what the input does, what it coordinates, and what it intentionally does not do."
+      input:
+        required:
+          - "source_type"
+          - "source_input"
+        optional:
+          - "source_content"
+          - "metadata"
+          - "normalized_context"
+      output:
+        section: "Responsibility"
+        schema:
+          does: "2-5 bullets"
+          does_not_do: "1-4 bullets"
+          boundary_note: "optional short paragraph"
+      prompt_template: |
+        You are the "responsibility" skill in an Understand System.
+
+        Input type: {{source_type}}
+        Raw input: {{source_input}}
+        Source content: {{source_content}}
+        Metadata: {{metadata}}
+        Normalized context: {{normalized_context}}
+
+        Task:
+        1. State the primary responsibilities.
+        2. Identify any coordination, delegation, or ownership boundaries.
+        3. Clarify what is outside scope.
+
+        Adaptation rules:
+        - Class: explain owned behavior versus delegated behavior.
+        - Function: explain the exact contract and side-effect boundary.
+        - Entity: explain what state it represents and what validation it owns.
+        - Feature: explain which part of the workflow it covers and where other components take over.
+        - Module or repository: explain subsystem boundaries and external dependencies.
+
+        Output only the "Responsibility" section with:
+        - "Does"
+        - "Does Not Do"
+        - optional "Boundary Note"
+
+        Focus on system understanding, not implementation trivia.
+
+    - name: "structure"
+      description: "Describe the internal structure and major parts so a reader can understand composition without reading the source line-by-line."
+      input:
+        required:
+          - "source_type"
+          - "source_input"
+        optional:
+          - "source_content"
+          - "metadata"
+          - "normalized_context"
+      output:
+        section: "Structure"
+        schema:
+          components: "2-8 bullets"
+          relationships: "short paragraph or bullets"
+      prompt_template: |
+        You are the "structure" skill in an Understand System.
+
+        Input type: {{source_type}}
+        Raw input: {{source_input}}
+        Source content: {{source_content}}
+        Metadata: {{metadata}}
+        Normalized context: {{normalized_context}}
+
+        Task:
+        Identify the main structural parts and how they relate.
+
+        Adaptation rules:
+        - Class: include fields, constructor behavior, public methods, important private helpers, and collaborators.
+        - Function: include parameters, major branches, helper calls, and outputs.
+        - Entity: include fields, derived values, relationships, and identifiers.
+        - Feature: include participating modules, services, handlers, UI pieces, jobs, or APIs.
+        - Module: include files, exported surfaces, internal layers, and dependencies.
+        - Repository: include packages, apps, services, libraries, entrypoints, and conventions.
+
+        Output only the "Structure" section.
+        Prefer grouped components over exhaustive lists.
+        Explain relationships between parts where that improves understanding.
+
+    - name: "flow"
+      description: "Explain the main execution flow or workflow, including control points, transitions, and interaction order."
+      input:
+        required:
+          - "source_type"
+          - "source_input"
+        optional:
+          - "source_content"
+          - "metadata"
+          - "normalized_context"
+      output:
+        section: "Flow"
+        schema:
+          main_flow: "ordered list"
+          alternate_paths: "optional bullets"
+      prompt_template: |
+        You are the "flow" skill in an Understand System.
+
+        Input type: {{source_type}}
+        Raw input: {{source_input}}
+        Source content: {{source_content}}
+        Metadata: {{metadata}}
+        Normalized context: {{normalized_context}}
+
+        Task:
+        1. Describe the main execution or interaction flow in order.
+        2. Include important alternate branches, error paths, or lifecycle transitions when relevant.
+        3. Emphasize causal flow, not code layout.
+
+        Adaptation rules:
+        - Function: describe input validation, transformation, branching, side effects, and return.
+        - Class: describe typical lifecycle or call sequence across methods.
+        - Feature: describe end-to-end workflow across components.
+        - Entity: describe creation, validation, mutation, persistence, and usage if relevant.
+        - Module or repository: describe request flow, data flow, build flow, or runtime flow depending on context.
+
+        Output only the "Flow" section.
+        Use an ordered list for the main flow.
+
+    - name: "key_logic"
+      description: "Surface the core implementation ideas, decision points, algorithms, invariants, and design choices that make the input work."
+      input:
+        required:
+          - "source_type"
+          - "source_input"
+        optional:
+          - "source_content"
+          - "metadata"
+          - "normalized_context"
+      output:
+        section: "Key Logic"
+        schema:
+          core_ideas: "3-7 bullets"
+          design_notes: "optional short paragraph"
+      prompt_template: |
+        You are the "key_logic" skill in an Understand System.
+
+        Input type: {{source_type}}
+        Raw input: {{source_input}}
+        Source content: {{source_content}}
+        Metadata: {{metadata}}
+        Normalized context: {{normalized_context}}
+
+        Task:
+        Identify the non-trivial logic that a reader must understand.
+
+        Focus on:
+        - Important conditionals and branching strategy
+        - State transitions or lifecycle rules
+        - Validation or normalization rules
+        - Performance-sensitive or correctness-sensitive choices
+        - Architectural patterns or tradeoffs
+        - Hidden assumptions encoded in logic
+
+        Adaptation rules:
+        - Function: explain the key algorithm or transformation.
+        - Class: explain how behavior is split and why.
+        - Feature: explain orchestration logic and coordination decisions.
+        - Entity: explain invariants, derived fields, and validation logic.
+        - Module or repository: explain architecture choices and cross-cutting logic.
+
+        Output only the "Key Logic" section.
+        Avoid shallow bullets such as "it calls X then returns Y."
+
+    - name: "data_model"
+      description: "Explain the main data shapes, fields, invariants, relationships, and transformation boundaries involved."
+      input:
+        required:
+          - "source_type"
+          - "source_input"
+        optional:
+          - "source_content"
+          - "metadata"
+          - "normalized_context"
+      output:
+        section: "Data Model"
+        schema:
+          primary_shapes: "2-6 bullets"
+          invariants: "optional bullets"
+          transformations: "optional bullets"
+      prompt_template: |
+        You are the "data_model" skill in an Understand System.
+
+        Input type: {{source_type}}
+        Raw input: {{source_input}}
+        Source content: {{source_content}}
+        Metadata: {{metadata}}
+        Normalized context: {{normalized_context}}
+
+        Task:
+        Explain the important data being represented, consumed, produced, or mutated.
+
+        Focus on:
+        - Core fields and what they mean
+        - Required versus optional values
+        - IDs, keys, references, and relationships
+        - Invariants and validation constraints
+        - Data transformations between layers or formats
+
+        Adaptation rules:
+        - Entity: emphasize fields, identity, invariants, and relationships.
+        - Function: emphasize input and output shapes.
+        - Class: emphasize owned state and exchanged objects.
+        - Feature: emphasize payloads, events, requests, responses, and persistence objects.
+        - Module or repository: emphasize shared schemas, contracts, and boundaries.
+        - If no meaningful data model exists, say so briefly instead of inventing one.
+
+        Output only the "Data Model" section.
+
+    - name: "usage"
+      description: "Show how the input is used in practice, including typical invocation patterns, examples, and expected outcomes."
+      input:
+        required:
+          - "source_type"
+          - "source_input"
+        optional:
+          - "source_content"
+          - "metadata"
+          - "normalized_context"
+      output:
+        section: "Usage"
+        schema:
+          scenarios: "2-5 bullets"
+          examples: "1-3 concise examples"
+      prompt_template: |
+        You are the "usage" skill in an Understand System.
+
+        Input type: {{source_type}}
+        Raw input: {{source_input}}
+        Source content: {{source_content}}
+        Metadata: {{metadata}}
+        Normalized context: {{normalized_context}}
+
+        Task:
+        Show how this is normally used.
+
+        Include:
+        - Typical entrypoints or call sites
+        - Inputs a caller provides
+        - Outputs or effects a caller should expect
+        - Common scenarios where this is the right tool
+
+        Adaptation rules:
+        - Function: provide concise call examples with expected behavior.
+        - Class: show construction plus common method usage.
+        - Entity: show creation, validation, storage, or serialization patterns.
+        - Feature: show user or system interaction scenarios.
+        - Module or repository: show how other parts integrate with it.
+        - URL: if source is docs or article, show how its content is intended to be consumed.
+
+        Output only the "Usage" section.
+        Keep examples short and realistic.
+
+    - name: "constraints"
+      description: "Capture assumptions, preconditions, environmental requirements, and non-obvious limits that shape correct usage."
+      input:
+        required:
+          - "source_type"
+          - "source_input"
+        optional:
+          - "source_content"
+          - "metadata"
+          - "normalized_context"
+      output:
+        section: "Constraints"
+        schema:
+          assumptions: "2-6 bullets"
+          requirements: "optional bullets"
+          limits: "optional bullets"
+      prompt_template: |
+        You are the "constraints" skill in an Understand System.
+
+        Input type: {{source_type}}
+        Raw input: {{source_input}}
+        Source content: {{source_content}}
+        Metadata: {{metadata}}
+        Normalized context: {{normalized_context}}
+
+        Task:
+        Identify what must be true for this input to work correctly.
+
+        Consider:
+        - Preconditions and required state
+        - Runtime or infrastructure dependencies
+        - Type, schema, or protocol assumptions
+        - Ordering requirements
+        - Security, concurrency, or consistency expectations
+        - Performance or scale limits
+
+        Adaptation rules:
+        - Function: emphasize preconditions and return guarantees.
+        - Class: emphasize lifecycle and collaborator requirements.
+        - Entity: emphasize validation and persistence constraints.
+        - Feature: emphasize integration assumptions and environment needs.
+        - Module or repository: emphasize architectural and operational assumptions.
+
+        Output only the "Constraints" section.
+        Distinguish explicit constraints from inferred ones.
+
+    - name: "pitfalls"
+      description: "Highlight failure modes, common misunderstandings, misuse patterns, and debugging traps."
+      input:
+        required:
+          - "source_type"
+          - "source_input"
+        optional:
+          - "source_content"
+          - "metadata"
+          - "normalized_context"
+      output:
+        section: "Pitfalls"
+        schema:
+          common_issues: "3-7 bullets"
+          warning_note: "optional short paragraph"
+      prompt_template: |
+        You are the "pitfalls" skill in an Understand System.
+
+        Input type: {{source_type}}
+        Raw input: {{source_input}}
+        Source content: {{source_content}}
+        Metadata: {{metadata}}
+        Normalized context: {{normalized_context}}
+
+        Task:
+        Identify the mistakes or misunderstandings a capable engineer is likely to make.
+
+        Focus on:
+        - Ambiguous behavior
+        - Misleading names or hidden coupling
+        - Edge cases and invalid states
+        - Ordering or lifecycle mistakes
+        - Incorrect assumptions about ownership, mutability, caching, or side effects
+        - Situations where behavior looks correct but is subtly wrong
+
+        Output only the "Pitfalls" section.
+        Prioritize practical warnings over generic advice.
+
+    - name: "extension"
+      description: "Explain how the input can be safely extended, customized, replaced, or evolved."
+      input:
+        required:
+          - "source_type"
+          - "source_input"
+        optional:
+          - "source_content"
+          - "metadata"
+          - "normalized_context"
+      output:
+        section: "Extension"
+        schema:
+          extension_points: "2-6 bullets"
+          safe_changes: "optional bullets"
+          caution_areas: "optional bullets"
+      prompt_template: |
+        You are the "extension" skill in an Understand System.
+
+        Input type: {{source_type}}
+        Raw input: {{source_input}}
+        Source content: {{source_content}}
+        Metadata: {{metadata}}
+        Normalized context: {{normalized_context}}
+
+        Task:
+        Explain how this can be extended or modified without breaking its intent.
+
+        Focus on:
+        - Explicit extension points
+        - Stable interfaces versus fragile internals
+        - What should be preserved when changing behavior
+        - Where a new feature or variation would naturally fit
+        - Tests or invariants that should be protected during extension
+
+        Adaptation rules:
+        - Class: emphasize overridable behavior, collaborators, and composition points.
+        - Function: emphasize where to split helpers or add branches safely.
+        - Entity: emphasize schema evolution and invariant preservation.
+        - Feature: emphasize where to insert new steps or integrations.
+        - Module or repository: emphasize package boundaries, public interfaces, and conventions.
+
+        Output only the "Extension" section.
+        Suggest realistic extension paths, not abstract possibilities.
+
+  master_skill:
+    name: "understand"
+    description: "Orchestrate all explanation sub-skills, adapt to the input type, handle URL normalization, and produce a complete structured explanation."
+    input:
+      required:
+        - "source_type"
+        - "source_input"
+      optional:
+        - "source_content"
+        - "metadata"
+    output:
+      format: "markdown"
+      artifact: "explanation"
+      sections:
+        - "Overview"
+        - "Responsibility"
+        - "Structure"
+        - "Flow"
+        - "Key Logic"
+        - "Data Model"
+        - "Usage"
+        - "Constraints"
+        - "Pitfalls"
+        - "Extension"
+    prompt_template: |
+      You are the master "understand" skill in an AI coding assistant.
+
+      Input type: {{source_type}}
+      Raw input: {{source_input}}
+      Source content: {{source_content}}
+      Metadata: {{metadata}}
+
+      Objective:
+      Produce a complete explanation that helps a capable engineer understand the input quickly and accurately.
+
+      Global rules:
+      - Explain for understanding, not translation.
+      - Do not restate code line-by-line.
+      - Do not produce trivial summaries.
+      - Highlight purpose, design choices, behavior, data movement, and boundaries.
+      - If something is inferred rather than explicit, label it as an inference.
+      - Keep the explanation structured and readable.
+      - Always output all 10 sections in the standard format. If a section is weakly applicable, state that briefly and concretely.
+
+      Step 1: Normalize the input
+      - If input type is feature, class, function, entity, module, or repository:
+        - Resolve the abstraction level.
+        - Identify the most relevant context from the provided content.
+      - If input type is url:
+        - Detect the resolved content type:
+          - code_repository
+          - single_file
+          - api_documentation
+          - technical_article
+        - Extract:
+          - purpose
+          - key structures
+          - main logic
+          - important terms, contracts, or workflows
+        - Convert that extraction into a normalized internal representation.
+        - Then continue exactly as if the input had been provided directly.
+
+      Step 2: Adapt analysis strategy
+      - Class: focus on fields, methods, collaborators, lifecycle, and interaction patterns.
+      - Entity: focus on fields, meaning, identity, validation, and constraints.
+      - Feature: focus on workflow, participating components, triggers, and outcomes.
+      - Function: focus on contract, branching, side effects, and edge cases.
+      - Module: focus on exports, internal organization, and dependencies.
+      - Repository: focus on architecture, major subsystems, and system conventions.
+      - API documentation: focus on endpoints, request/response model, auth, and error behavior.
+      - Technical article: focus on the core idea, argument, mechanism, and takeaways.
+
+      Step 3: Orchestrate the sub-skills
+      Generate the following sections in order:
+      1. Overview
+      2. Responsibility
+      3. Structure
+      4. Flow
+      5. Key Logic
+      6. Data Model
+      7. Usage
+      8. Constraints
+      9. Pitfalls
+      10. Extension
+
+      Step 4: Quality bar
+      Each section should answer the deeper question behind the heading:
+      - Overview: What is this really?
+      - Responsibility: What does it own, and where are the boundaries?
+      - Structure: What are the important parts?
+      - Flow: How does it behave over time?
+      - Key Logic: What ideas or mechanisms make it work?
+      - Data Model: What data matters and what rules shape it?
+      - Usage: How is it actually used?
+      - Constraints: What assumptions must hold?
+      - Pitfalls: Where do people get it wrong?
+      - Extension: How should it evolve safely?
+
+      Output format:
+      ## Overview
+      ...
+      ## Responsibility
+      ...
+      ## Structure
+      ...
+      ## Flow
+      ...
+      ## Key Logic
+      ...
+      ## Data Model
+      ...
+      ## Usage
+      ...
+      ## Constraints
+      ...
+      ## Pitfalls
+      ...
+      ## Extension
+      ...
+
+      Do not include any extra preamble, meta-explanation, or commentary outside the 10 sections.
