@@ -8,7 +8,7 @@
       "sparse": [
         "skills"
       ],
-      "commit": "b7a8f76985f1e93e75dd2f2a3b424dc731bd9d37"
+      "commit": "f2cbfbefebbfef77321e4c9abc9e949826bea9d7"
     },
     {
       "name": "antfu-skills",
@@ -18,7 +18,7 @@
       "sparse": [
         "skills"
       ],
-      "commit": "c35a5588a5158b5b404a14fb10469b2b6dc1952b"
+      "commit": "50deaeb269d80d92db7a2c5a677290309ae307fc"
     }
   ]
 }
