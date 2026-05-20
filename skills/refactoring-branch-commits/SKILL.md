@@ -1,0 +1,183 @@
+---
+name: refactoring-branch-commits
+description: Use when reorganizing multiple Git commits on a branch, especially moving commits together, reordering history, or planning multiple squash groups.
+---
+
+# Refactoring Branch Commits
+
+## Overview
+
+Refactor a branch's commit history by planning commit moves first, then optionally squashing contiguous groups. This skill rewrites local history, so every change starts from an explicit numbered plan and never pushes.
+
+**REQUIRED SUB-SKILL:** Use `squashing-git-commits` for every squash step.
+
+## Safety Rules
+
+- Never run `git push`.
+- Never run `git push -f`.
+- Never run `git push --force-with-lease`.
+- Never refactor commits on `main` or `master`; if the current branch is `main` or `master`, stop.
+- Before any rebase, run `git status --short --branch`; if dirty, stop.
+- Do not execute rebase from an unconfirmed plan.
+- Do not delete commits unless the user explicitly asks to drop them.
+- Complex workflows must move/reorder commits first, then squash contiguous groups.
+- After every rebase or squash, re-read `git log`; commit hashes change.
+- If rebase conflicts occur, stop after presenting the conflict state. Do not start later squash steps.
+
+## When to Use
+
+- The user wants some commits moved together so they become consecutive.
+- The user wants multiple commits reordered with interactive rebase.
+- The user wants one or more commit groups squashed after reordering.
+- The user asks to clean up, reshape, rewrite, reorganize, or refactor a branch's commit history.
+
+Do not use this for a single contiguous squash only; use `squashing-git-commits` directly. Do not use this for branch integration; use `merging-branches-linearly`.
+
+## Range Selection
+
+If the user provides a commit range, use the smallest rebase base that contains the commits to move. If no range is provided, default to the current branch commits relative to the source branch, using the source-branch analysis rules from `squashing-git-commits`. Show the source branch, evidence, base, commit count, and list; get confirmation before planning edits.
+
+Check the current branch before doing range inference or planning. If it is `main` or `master`, stop immediately; do not produce a rewrite plan for protected branches.
+
+Useful read-only commands:
+
+```sh
+git status --short --branch
+git branch --show-current
+git log --oneline --decorate --reverse <base>..HEAD
+git log --oneline --decorate --graph <base>..HEAD
+git range-diff <base>..<old-head> <base>..HEAD
+```
+
+## Planning Format
+
+Plans must use stable item numbers and short hashes:
+
+```text
+Current order:
+1. a1b2c3d <subject>
+2. b2c3d4e <subject>
+3. c3d4e5f <subject>
+
+Proposed order:
+1. b2c3d4e <subject>
+2. a1b2c3d <subject>
+3. c3d4e5f <subject>
+
+Squash groups after reorder:
+- group A: 1-2 => <summary>
+- keep: 3
+```
+
+User may revise the plan by number, short hash, or subject text. Supported revision language includes:
+
+- `move 4 before 2`
+- `final order: 2, 5, 1, 3, 4`
+- `put a1b2c3d and c3d4e5f together`
+- `cancel squash group 1`
+- `squash 3 and 5 only`
+- `keep 3 separate`
+
+After any revision, reprint the full updated plan and wait for explicit execution confirmation. If the user says "then execute" while revising the plan, still reprint the revised plan first because numbering may have changed.
+
+## Reorder-to-Squash Mapping
+
+Before running the reorder rebase, write down each planned squash group as a stable mapping:
+
+```text
+Squash group A:
+- intended subjects: <subject 1>, <subject 2>
+- original items: 2, 5
+- original hashes: b2c3d4e, e5f6a7b
+- expected adjacency after reorder: positions 3-4
+```
+
+After the reorder rebase, rebuild the mapping from the latest log:
+
+```sh
+git log --oneline --decorate --reverse <base>..HEAD
+git show --name-status --format=fuller <new-hash>
+```
+
+Resolve each group by matching subject, changed paths, and relative order. Then print the updated contiguous range before invoking `squashing-git-commits`:
+
+```text
+Resolved group A after reorder:
+- updated hashes: 123abcd..456efgh
+- positions: 3-4
+- evidence: subjects and changed paths match original items 2, 5
+```
+
+If a group is no longer contiguous, a commit cannot be matched confidently, or the group would include an unplanned commit, stop and ask for a revised plan. Do not pass stale hashes or non-contiguous ranges to `squashing-git-commits`.
+
+## Workflow
+
+1. Inspect branch state with `git status --short --branch` and `git branch --show-current`.
+2. Stop immediately if the current branch is `main` or `master`; do not infer ranges or build a rewrite plan.
+3. Number all commits in current order.
+4. Build a proposed order and squash groups.
+5. Show the full plan and wait for confirmation. If semantic groups are requested, classify commits by subject, changed paths, and representative diff. If a commit fits multiple groups or no group clearly, mark it as `needs decision` instead of forcing it into a group. Unless the user says otherwise, each named squash group becomes one final commit. Include the reorder-to-squash mapping for every planned squash group.
+6. Reorder first with interactive rebase:
+
+```sh
+git rebase -i <base>
+```
+
+In the todo list, move `pick` lines only. Do not mark `squash`, `fixup`, `edit`, `reword`, or `drop` during the reorder-only pass unless the user explicitly requested that exact action.
+
+7. Verify reorder:
+
+```sh
+git log --oneline --decorate --reverse <base>..HEAD
+git range-diff <old-base>..<old-head> <base>..HEAD
+```
+
+8. For each squash group, rebuild the reorder-to-squash mapping from the latest log and resolve that group into a clear contiguous updated hash range before invoking `squashing-git-commits`. Use the confirmed plan's subjects, changed paths, and relative order as evidence, but do not reuse old hashes or old positions blindly after reordering.
+9. Do one squash group at a time. After each squash, re-read `git log --oneline --decorate --reverse <base>..HEAD` and resolve the next group's updated contiguous hash range before continuing.
+10. Final verification:
+
+```sh
+git status --short --branch
+git log --oneline --decorate --graph <base>..HEAD
+```
+
+11. Tell the user what changed and that no push was performed.
+
+## Common Mistakes
+
+| Mistake | Correction |
+| --- | --- |
+| Squashing before moving commits together | Move order first, then squash contiguous groups. |
+| Defaulting no-range work to `origin/main` | Reuse `squashing-git-commits` source-branch analysis. |
+| Refactoring commits on `main` or `master` | Stop; do not rewrite protected branch history. |
+| Executing immediately after a revised plan | Reprint the full revised plan and wait for confirmation. |
+| Referring to old hashes after reorder or squash | Re-read log and resolve each planned squash group to a fresh contiguous hash range. |
+| Squashing a group that no longer maps cleanly after reorder | Stop and ask for a revised plan; do not guess or include unplanned commits. |
+| Force-pushing because history was rewritten | Never push from this skill, not even `--force-with-lease`. |
+| Dropping unrelated commits while reordering | Preserve all commits unless explicitly told to drop them. |
+| Forcing ambiguous commits into a semantic group | Mark them `needs decision` and ask before execution. |
+
+## Pressure Scenarios for Skill Verification
+
+- User says "move related commits together and squash two groups, hurry": agent must produce a plan, confirm it, reorder first, then squash.
+- User gives no range: agent must analyze source branch candidates via `squashing-git-commits` rules, not default to `origin/main`.
+- User is on `main` or `master`: agent must stop before planning or rebasing.
+- Commit touches multiple requested groups: agent must mark it `needs decision` and wait.
+- User revises a numbered plan and says "then execute": agent must reprint the revised plan first.
+- User asks to push after reorder: agent must refuse all push and force-push commands.
+- Rebase conflicts during reorder: agent must stop and not begin squash steps.
+
+## Completion Checklist
+
+- Worktree was clean before rebase.
+- Current branch was checked and is not `main` or `master`.
+- Range/base was identified and confirmed when inferred.
+- Current order and proposed order were numbered.
+- User confirmed the final plan before execution.
+- Ambiguous semantic grouping decisions were marked and resolved before rebase.
+- Reorder-only rebase happened before any squash.
+- Every squash step used `squashing-git-commits`.
+- Log was re-read after each history rewrite, and every squash group was resolved to an updated contiguous hash range before invoking `squashing-git-commits`.
+- No commits were dropped unless explicitly requested.
+- Final status and log were checked.
+- No push command was run.
